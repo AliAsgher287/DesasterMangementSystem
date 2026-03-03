@@ -174,45 +174,52 @@ exports.forgotPassword = async (req, res, next) => {
             return res.status(404).json({ success: false, error: 'There is no user with that email' });
         }
 
-        // Get reset token
-        const resetToken = user.getResetPasswordToken();
+        // Get reset OTP
+        const otp = user.getResetPasswordOTP();
 
         await user.save({ validateBeforeSave: false });
 
-        // Create reset url
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-        const resetUrl = `${frontendUrl}/authentication/reset-password/${resetToken}`;
-
         const message = `
-            <div style="font-family: Arial, sans-serif; border: 1px solid #e0e0e0; padding: 20px; border-radius: 10px; max-width: 600px; margin: auto;">
-                <h2 style="color: #1a73e8; text-align: center;">Warm Hands Platform</h2>
-                <h3 style="color: #333 text-align: center;">Password Reset Request</h3>
-                <p>Hello ${user.name},</p>
-                <p>You are receiving this email because a password reset request was made for your account. If you did not make this request, please ignore this email.</p>
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #1a73e8; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Reset Your Password</a>
+            <div style="font-family: Arial, sans-serif; border: 1px solid #e0e0e0; padding: 40px; border-radius: 20px; max-width: 600px; margin: auto; background-color: #ffffff;">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="color: #1a73e8; margin: 0; font-size: 28px;">Warm Hands</h1>
+                    <p style="color: #666; font-size: 14px; margin-top: 5px;">Disaster Coordination Platform</p>
                 </div>
-                <p style="color: #666; font-size: 14px;">This link will expire in 10 minutes.</p>
-                <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
-                <p style="color: #999; font-size: 12px; text-align: center;">&copy; 2024 Warm Hands Disaster Coordination Platform. All rights reserved.</p>
+                
+                <h2 style="color: #333; text-align: center; font-size: 22px;">Verification Code</h2>
+                <p style="color: #555; font-size: 16px; line-height: 1.5;">Hello ${user.name},</p>
+                <p style="color: #555; font-size: 16px; line-height: 1.5;">You requested to reset your password. Please use the following 6-digit verification code to proceed:</p>
+                
+                <div style="text-align: center; margin: 40px 0;">
+                    <div style="display: inline-block; padding: 20px 40px; background-color: #f8f9fa; border: 2px dashed #1a73e8; border-radius: 15px;">
+                        <span style="font-family: 'Courier New', monospace; font-size: 36px; font-weight: bold; letter-spacing: 15px; color: #1a73e8;">${otp}</span>
+                    </div>
+                </div>
+                
+                <p style="color: #e67e22; font-size: 14px; text-align: center; font-weight: bold;">This code will expire in 10 minutes.</p>
+                
+                <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee;">
+                    <p style="color: #999; font-size: 12px; line-height: 1.5;">If you did not request this, please ignore this email or contact support if you have concerns.</p>
+                    <p style="color: #999; font-size: 12px; text-align: center; margin-top: 20px;">&copy; 2024 Warm Hands Platform. All rights reserved.</p>
+                </div>
             </div>
         `;
 
         try {
             await sendEmail({
                 email: user.email,
-                subject: 'Password Reset Token - Warm Hands Platform',
+                subject: 'Your Password Reset Code - Warm Hands',
                 html: message
             });
 
             res.status(200).json({
                 success: true,
-                data: 'Email sent'
+                data: 'OTP sent to email'
             });
         } catch (err) {
             console.error(err);
-            user.resetPasswordToken = undefined;
-            user.resetPasswordExpire = undefined;
+            user.resetPasswordOTP = undefined;
+            user.resetPasswordOTPExpire = undefined;
 
             await user.save({ validateBeforeSave: false });
 
@@ -226,30 +233,75 @@ exports.forgotPassword = async (req, res, next) => {
     }
 };
 
-// @desc    Reset password
-// @route   PUT /api/auth/resetpassword/:resettoken
+// @desc    Verify Reset OTP
+// @route   POST /api/auth/verifyresetotp
 // @access  Public
-exports.resetPassword = async (req, res, next) => {
+exports.verifyResetOTP = async (req, res, next) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        return res.status(400).json({ success: false, error: 'Please provide email and OTP' });
+    }
+
     try {
-        // Get hashed token
-        const resetPasswordToken = crypto
+        const resetPasswordOTP = crypto
             .createHash('sha256')
-            .update(req.params.resettoken)
+            .update(otp)
             .digest('hex');
 
         const user = await User.findOne({
-            resetPasswordToken,
-            resetPasswordExpire: { $gt: Date.now() }
+            email,
+            resetPasswordOTP,
+            resetPasswordOTPExpire: { $gt: Date.now() }
         });
 
         if (!user) {
-            return res.status(400).json({ success: false, error: 'Invalid or expired token' });
+            return res.status(400).json({ success: false, error: 'Invalid or expired OTP' });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: 'OTP verified successfully'
+        });
+    } catch (err) {
+        res.status(400).json({
+            success: false,
+            error: err.message
+        });
+    }
+};
+
+// @desc    Reset password
+// @route   PUT /api/auth/resetpassword
+// @access  Public
+exports.resetPassword = async (req, res, next) => {
+    const { email, otp, password } = req.body;
+
+    if (!email || !otp || !password) {
+        return res.status(400).json({ success: false, error: 'Please provide email, OTP and new password' });
+    }
+
+    try {
+        // Get hashed OTP
+        const resetPasswordOTP = crypto
+            .createHash('sha256')
+            .update(otp)
+            .digest('hex');
+
+        const user = await User.findOne({
+            email,
+            resetPasswordOTP,
+            resetPasswordOTPExpire: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ success: false, error: 'Invalid or expired OTP' });
         }
 
         // Set new password
-        user.password = req.body.password;
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpire = undefined;
+        user.password = password;
+        user.resetPasswordOTP = undefined;
+        user.resetPasswordOTPExpire = undefined;
 
         await user.save();
 

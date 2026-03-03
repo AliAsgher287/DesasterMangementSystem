@@ -47,8 +47,8 @@ const UserSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
-    resetPasswordToken: String,
-    resetPasswordExpire: Date
+    resetPasswordOTP: String,
+    resetPasswordOTPExpire: Date
 });
 
 // Encrypt password using bcrypt
@@ -66,22 +66,22 @@ UserSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Generate and hash password token
-UserSchema.methods.getResetPasswordToken = function () {
-    const crypto = require('crypto');
-    // Generate token
-    const resetToken = crypto.randomBytes(20).toString('hex');
+// Generate and hash password OTP
+UserSchema.methods.getResetPasswordOTP = function () {
+    // Generate 6 digit numeric code
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Hash token and set to resetPasswordToken field
-    this.resetPasswordToken = crypto
+    const crypto = require('crypto');
+    // Hash OTP and set to resetPasswordOTP field
+    this.resetPasswordOTP = crypto
         .createHash('sha256')
-        .update(resetToken)
+        .update(otp)
         .digest('hex');
 
     // Set expire (10 minutes)
-    this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+    this.resetPasswordOTPExpire = Date.now() + 10 * 60 * 1000;
 
-    return resetToken;
+    return otp;
 };
 
 module.exports = mongoose.model('User', UserSchema);
