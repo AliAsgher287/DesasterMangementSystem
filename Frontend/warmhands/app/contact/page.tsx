@@ -16,10 +16,34 @@ export default function ContactPage() {
         message: ""
     });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Handle form submission logic here
-        toast.success("Thank you for your message. Our team will get back to you shortly.");
+        setIsLoading(true);
+
+        try {
+            const response = await fetch("http://localhost:5000/api/contacts", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to send message");
+            }
+
+            toast.success("Thank you for your message. Our team will get back to you shortly.");
+            setFormData({ name: "", email: "", subject: "General Inquiry", message: "" });
+        } catch (err: any) {
+            toast.error(err.message || "Failed to send message");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -147,6 +171,8 @@ export default function ContactPage() {
                                             type="text"
                                             required
                                             placeholder="Zohab Ahmed"
+                                            value={formData.name}
+                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 font-semibold"
                                         />
                                     </div>
@@ -156,6 +182,8 @@ export default function ContactPage() {
                                             type="email"
                                             required
                                             placeholder="zohab@pakistan-aid.org"
+                                            value={formData.email}
+                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 font-semibold"
                                         />
                                     </div>
@@ -164,12 +192,15 @@ export default function ContactPage() {
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-slate-800 ml-1">Message Subject</label>
                                     <select
+                                        value={formData.subject}
+                                        onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                                         className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-semibold"
                                     >
                                         <option>Organization Verification Inquiry</option>
                                         <option>Technical Platform Support</option>
                                         <option>Partnership/Donation Queries</option>
                                         <option>Report a Safety Violation</option>
+                                        <option>Others</option>
                                     </select>
                                 </div>
 
@@ -179,12 +210,14 @@ export default function ContactPage() {
                                         required
                                         placeholder="Please provide as much detail as possible..."
                                         rows={5}
+                                        value={formData.message}
+                                        onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                                         className="w-full bg-slate-50 border border-slate-100 rounded-3xl px-6 py-5 focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 font-semibold resize-none"
                                     />
                                 </div>
 
-                                <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black uppercase tracking-[0.3em] rounded-2xl hover:bg-slate-900 transition-all shadow-[0_20px_40px_-12px_rgba(37,99,235,0.3)] hover:-translate-y-1 active:translate-y-0 flex items-center justify-center gap-4">
-                                    <HiChatBubbleLeftRight className="text-2xl" /> Send Request
+                                <button type="submit" disabled={isLoading} className="w-full py-5 bg-blue-600 text-white font-black uppercase tracking-[0.3em] rounded-2xl hover:bg-slate-900 transition-all shadow-[0_20px_40px_-12px_rgba(37,99,235,0.3)] hover:-translate-y-1 active:translate-y-0 flex items-center justify-center gap-4 disabled:opacity-50">
+                                    {isLoading ? <span className="animate-pulse">Sending...</span> : <><HiChatBubbleLeftRight className="text-2xl" /> Send Request</>}
                                 </button>
                             </form>
                         </div>

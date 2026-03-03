@@ -3,172 +3,167 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { FiMail, FiArrowLeft, FiCheckCircle } from "react-icons/fi";
+import { FiLoader, FiAlertCircle, FiArrowLeft, FiMail, FiCheckCircle } from "react-icons/fi";
+import { toast } from "react-hot-toast";
 
-export default function Page() {
-    const [emailSent, setEmailSent] = useState(false);
+export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [isSent, setIsSent] = useState(false);
+    const [error, setError] = useState("");
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Simulate sending email
-        setEmailSent(true);
+        setError("");
+
+        if (!email.trim()) {
+            toast.error("Please enter your email address");
+            return;
+        }
+
+        setIsLoading(true);
+
+        try {
+            const response = await fetch("http://localhost:5000/api/auth/forgotpassword", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ email })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || "Failed to process request");
+            }
+
+            setIsSent(true);
+            toast.success("Reset link sent! Please check your email inbox.");
+        } catch (err: any) {
+            setError(err.message);
+            toast.error(err.message || "Failed to send reset link");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex flex-col">
-            {/* Navbar */}
-            <header className="w-full bg-white shadow-sm sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-                    <Link href="/landingPage" className="flex items-center gap-2">
+        <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+            {/* Header */}
+            <header className="fixed top-0 z-50 w-full bg-white/70 backdrop-blur-xl border-b border-slate-100">
+                <div className="mx-auto flex max-w-[1440px] items-center justify-between px-6 py-3">
+                    <Link href="/landingPage" className="hover:opacity-80 transition-all active:scale-95">
                         <Image
                             src="/images/logo.png"
                             alt="Warm Hands Logo"
-                            width={120}
-                            height={40}
-                            className="h-8 w-auto"
+                            width={110}
+                            height={35}
+                            className="h-8 w-auto object-contain"
+                            unoptimized
+                            priority
                         />
                     </Link>
-
-                    {/* Desktop Navigation */}
-                    <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-sm text-slate-600">
-                        <Link href="/landingPage" className="hover:text-blue-600 transition-colors">
-                            Home
-                        </Link>
-                        <Link href="/landingPage#about" className="hover:text-blue-600 transition-colors">
-                            About
-                        </Link>
-                        <Link href="/landingPage#resources" className="hover:text-blue-600 transition-colors">
-                            Resources
-                        </Link>
-                        <Link
-                            href="/authentication/login"
-                            className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                        >
-                            Contact Us
-                        </Link>
-                    </nav>
-
-                    {/* Mobile Menu Button */}
-                    <button className="md:hidden p-2 text-slate-600">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
-                    </button>
                 </div>
             </header>
 
-            {/* Main Content */}
-            <main className="flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
-                <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 sm:p-12">
-                    {!emailSent ? (
+            <main className="flex-1 flex items-center justify-center p-4 pt-20">
+                <div className="bg-white rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.08)] max-w-md w-full p-8 md:p-12 border border-slate-100">
+                    <div className="flex justify-center mb-8">
+                        <div className="w-20 h-20 relative">
+                            <Image
+                                src="/images/logo2.png"
+                                alt="Emblem"
+                                fill
+                                className="object-contain"
+                                priority
+                            />
+                        </div>
+                    </div>
+
+                    {!isSent ? (
                         <>
-                            {/* Header */}
-                            <div className="text-center mb-10">
-                                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                                    <FiMail className="text-3xl text-blue-600" />
-                                </div>
-                                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                                    Forgot Password?
+                            <div className="text-center mb-8">
+                                <h1 className="text-3xl font-bold text-slate-900 tracking-tighter mb-3">
+                                    Reset Password
                                 </h1>
-                                <p className="text-sm text-slate-500 mt-3">
-                                    No worries! Enter your email address and we'll send you a link to reset your password.
+                                <p className="text-slate-500 text-xs font-semibold px-4 italic">
+                                    Enter the institutional email associated with your account and we'll send a secure reset link.
                                 </p>
                             </div>
 
-                            {/* Form */}
-                            <form onSubmit={handleSubmit} className="space-y-6">
-                                {/* Email Address */}
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            <form className="space-y-6" onSubmit={handleSubmit}>
+                                {error && (
+                                    <div className="bg-red-50 border border-red-100 text-red-500 px-6 py-4 rounded-2xl text-[11px] font-black animate-shake flex items-center gap-4">
+                                        <FiAlertCircle className="flex-shrink-0 text-lg text-red-400" />
+                                        {error}
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-slate-800 ml-1">
                                         Email Address
                                     </label>
-                                    <input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="name@organization.org"
-                                        required
-                                        className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-sm"
-                                    />
+                                    <div className="relative">
+                                        <FiMail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            type="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            required
+                                            placeholder="agent@org.global"
+                                            className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-14 pr-6 py-4.5 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 focus:bg-white outline-none transition-all text-slate-900 placeholder:text-slate-300 font-semibold shadow-inner-sm"
+                                        />
+                                    </div>
                                 </div>
 
-                                {/* Submit Button */}
                                 <button
                                     type="submit"
-                                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg text-sm sm:text-base"
+                                    disabled={isLoading}
+                                    className="w-full bg-blue-600 text-white py-5 rounded-2xl font-bold text-[14px] uppercase tracking-[0.2em] hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 disabled:opacity-50 border-b-4 border-blue-800"
                                 >
-                                    Send Reset Link
+                                    {isLoading ? (
+                                        <div className="flex items-center justify-center gap-4">
+                                            <FiLoader className="animate-spin" />
+                                            Authorizing
+                                        </div>
+                                    ) : (
+                                        "Send Reset Link"
+                                    )}
                                 </button>
-
-                                {/* Back to Login */}
-                                <Link
-                                    href="/authentication/login"
-                                    className="flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-blue-600 transition-colors pt-2"
-                                >
-                                    <FiArrowLeft className="text-base" />
-                                    Back to Login
-                                </Link>
                             </form>
                         </>
                     ) : (
-                        <>
-                            {/* Success State */}
-                            <div className="text-center">
-                                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-                                    <FiCheckCircle className="text-3xl text-green-600" />
-                                </div>
-                                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-                                    Check Your Email
-                                </h1>
-                                <p className="text-sm text-slate-500 mt-3 mb-8">
-                                    We've sent a password reset link to <span className="font-semibold text-slate-700">{email}</span>.
-                                    Please check your inbox and follow the instructions.
-                                </p>
-
-                                {/* Resend Button */}
-                                <button
-                                    onClick={() => setEmailSent(false)}
-                                    className="w-full bg-slate-100 text-slate-700 py-3 rounded-lg font-semibold hover:bg-slate-200 transition-all text-sm sm:text-base mb-4"
-                                >
-                                    Didn't receive it? Resend
-                                </button>
-
-                                {/* Back to Login */}
-                                <Link
-                                    href="/authentication/login"
-                                    className="flex items-center justify-center gap-2 text-sm text-slate-600 hover:text-blue-600 transition-colors"
-                                >
-                                    <FiArrowLeft className="text-base" />
-                                    Back to Login
-                                </Link>
+                        <div className="text-center">
+                            <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-100">
+                                <FiCheckCircle className="text-3xl" />
                             </div>
-                        </>
+                            <h2 className="text-2xl font-bold text-slate-900 mb-2">Email Dispatched</h2>
+                            <p className="text-slate-500 text-sm font-medium mb-8">
+                                A secure transmission was sent to <strong>{email}</strong>. Please follow the instructions to reset your access key.
+                            </p>
+                            <button
+                                onClick={() => setIsSent(false)}
+                                className="text-blue-600 font-bold text-xs uppercase tracking-widest hover:underline"
+                            >
+                                Didn't receive it? Try again
+                            </button>
+                        </div>
                     )}
+
+                    <div className="mt-10 pt-8 border-t border-slate-50 text-center">
+                        <Link
+                            href="/authentication/login"
+                            className="inline-flex items-center gap-2 text-[11px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
+                        >
+                            <FiArrowLeft /> Back to Security Portal
+                        </Link>
+                    </div>
                 </div>
             </main>
 
-            {/* Footer */}
-            <footer className="bg-white py-8">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    {/* Footer Links */}
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-12 text-xs sm:text-sm text-slate-500 uppercase tracking-wide">
-                        <Link href="/docs" className="hover:text-blue-600 transition-colors">
-                            Documentation
-                        </Link>
-                        <Link href="/privacy" className="hover:text-blue-600 transition-colors">
-                            Privacy Policy
-                        </Link>
-                        <Link href="/status" className="hover:text-blue-600 transition-colors">
-                            System Status
-                        </Link>
-                    </div>
-
-                    {/* Copyright */}
-                    <div className="mt-6 text-center text-xs text-slate-400">
-                        © 2024 Warm Hands Coordination Platform. All rights reserved.
-                    </div>
-                </div>
+            <footer className="py-6 text-center text-[10px] font-bold text-slate-300 uppercase tracking-[0.4em]">
+                © 2024 Warm Hands Logistics Infrastructure • High Precision Security
             </footer>
         </div>
     );

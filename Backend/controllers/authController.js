@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail');
 
 // @desc    Register user
@@ -173,10 +174,86 @@ exports.forgotPassword = async (req, res, next) => {
             return res.status(404).json({ success: false, error: 'There is no user with that email' });
         }
 
-        res.status(200).json({
-            success: true,
-            data: 'Email sent (placeholder logic)'
+        // Get reset token
+        const resetToken = user.getResetPasswordToken();
+
+        await user.save({ validateBeforeSave: false });
+
+        // Create reset url
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const resetUrl = `${frontendUrl}/authentication/reset-password/${resetToken}`;
+
+        const message = `
+            <div style="font-family: Arial, sans-serif; border: 1px solid #e0e0e0; padding: 20px; border-radius: 10px; max-width: 600px; margin: auto;">
+                <h2 style="color: #1a73e8; text-align: center;">Warm Hands Platform</h2>
+                <h3 style="color: #333 text-align: center;">Password Reset Request</h3>
+                <p>Hello ${user.name},</p>
+                <p>You are receiving this email because a password reset request was made for your account. If you did not make this request, please ignore this email.</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #1a73e8; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Reset Your Password</a>
+                </div>
+                <p style="color: #666; font-size: 14px;">This link will expire in 10 minutes.</p>
+                <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
+                <p style="color: #999; font-size: 12px; text-align: center;">&copy; 2024 Warm Hands Disaster Coordination Platform. All rights reserved.</p>
+            </div>
+        `;
+
+        try {
+            await sendEmail({
+                email: user.email,
+                subject: 'Password Reset Token - Warm Hands Platform',
+                html: message
+            });
+
+            res.status(200).json({
+                success: true,
+                data: 'Email sent'
+            });
+        } catch (err) {
+            console.error(err);
+            user.resetPasswordToken = undefined;
+            user.resetPasswordExpire = undefined;
+
+            await user.save({ validateBeforeSave: false });
+
+            return res.status(500).json({ success: false, error: 'Email could not be sent' });
+        }
+    } catch (err) {
+        res.status(400).json({
+            success: false,
+            error: err.message
         });
+    }
+};
+
+// @desc    Reset password
+// @route   PUT /api/auth/resetpassword/:resettoken
+// @access  Public
+exports.resetPassword = async (req, res, next) => {
+    try {
+        // Get hashed token
+        const resetPasswordToken = crypto
+            .createHash('sha256')
+            .update(req.params.resettoken)
+            .digest('hex');
+
+        const user = await User.findOne({
+            resetPasswordToken,
+            resetPasswordExpire: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ success: false, error: 'Invalid or expired token' });
+        }
+
+        // Set new password
+        user.password = req.body.password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+
+        await user.save();
+
+        sendTokenResponse(user, 200, res);
     } catch (err) {
         res.status(400).json({
             success: false,

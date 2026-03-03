@@ -9,6 +9,7 @@ import {
     FiRefreshCw, FiPlus, FiCheck, FiX, FiLoader, FiLogOut,
     FiShield, FiMapPin, FiClock, FiChevronDown
 } from "react-icons/fi";
+import { HiChatBubbleLeftRight } from "react-icons/hi2";
 import { toast } from "react-hot-toast";
 
 interface CitizenHelpRequest {
@@ -32,6 +33,16 @@ interface FieldReport {
     priority: string;
     description: string;
     resourcesNeeded?: string;
+    status: string;
+    createdAt: string;
+}
+
+interface ContactQuery {
+    _id: string;
+    name: string;
+    email: string;
+    subject: string;
+    message: string;
     status: string;
     createdAt: string;
 }
@@ -84,6 +95,7 @@ export default function SuperAdminDashboard() {
     const [organizations, setOrganizations] = useState<Organization[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [responders, setResponders] = useState<Responder[]>([]);
+    const [contacts, setContacts] = useState<ContactQuery[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -122,16 +134,17 @@ export default function SuperAdminDashboard() {
         setIsLoading(true);
         setError("");
         try {
-            const [citizenRes, fieldRes, resourceRes, orgsRes, tasksRes] = await Promise.all([
+            const [citizenRes, fieldRes, resourceRes, orgsRes, tasksRes, contactsRes] = await Promise.all([
                 fetch(`${API}/citizen-help`, { headers }),
                 fetch(`${API}/field-reports`, { headers }),
                 fetch(`${API}/resources`, { headers }),
                 fetch(`${API}/super-admin/organizations`, { headers }),
-                fetch(`${API}/tasks`, { headers })
+                fetch(`${API}/tasks`, { headers }),
+                fetch(`${API}/contacts`, { headers })
             ]);
 
-            const [citizenData, fieldData, resourceData, orgsData, tasksData] = await Promise.all([
-                citizenRes.json(), fieldRes.json(), resourceRes.json(), orgsRes.json(), tasksRes.json()
+            const [citizenData, fieldData, resourceData, orgsData, tasksData, contactsData] = await Promise.all([
+                citizenRes.json(), fieldRes.json(), resourceRes.json(), orgsRes.json(), tasksRes.json(), contactsRes.json()
             ]);
 
             if (citizenData.success) setCitizenRequests(citizenData.data);
@@ -139,6 +152,7 @@ export default function SuperAdminDashboard() {
             if (resourceData.success) setResources(resourceData.data);
             if (orgsData.success) setOrganizations(orgsData.data);
             if (tasksData.success) setTasks(tasksData.data);
+            if (contactsData.success) setContacts(contactsData.data);
         } catch {
             setError("Failed to load data. Check backend connection.");
         } finally {
@@ -170,6 +184,22 @@ export default function SuperAdminDashboard() {
             });
             fetchData();
         } catch { toast.error("Error updating status"); }
+    };
+
+    const handleUpdateContactStatus = async (id: string, status: string) => {
+        try {
+            const res = await fetch(`${API}/contacts/${id}`, {
+                method: "PUT", headers,
+                body: JSON.stringify({ status })
+            });
+            const data = await res.json();
+            if (data.success) {
+                fetchData();
+                toast.success(`Query marked as ${status}`);
+            } else {
+                toast.error(data.error || "Failed to update status");
+            }
+        } catch { toast.error("Connection error"); }
     };
 
     const openDispatchFromCitizen = (req: CitizenHelpRequest) => {
@@ -271,14 +301,14 @@ export default function SuperAdminDashboard() {
     };
 
     const pendingCitizen = citizenRequests.filter(r => r.status === "Pending").length;
-    const pendingReports = fieldReports.filter(r => r.status === "Pending").length;
+    const pendingContacts = contacts.filter(c => c.status === "Pending").length;
     const totalResources = resources.length;
     const activeTasks = tasks.filter(t => t.status !== "Completed").length;
 
     const navItems = [
         { id: "dashboard", label: "Overview", icon: FiGrid },
         { id: "citizen", label: "Citizen Help", icon: FiAlertCircle, badge: pendingCitizen },
-        { id: "fieldreports", label: "Field Reports", icon: FiFileText, badge: pendingReports },
+        { id: "contacts", label: "Contact Queries", icon: HiChatBubbleLeftRight, badge: pendingContacts },
         { id: "resources", label: "All Resources", icon: FiPackage },
         { id: "tasks", label: "Task Management", icon: FiUsers },
         { id: "history", label: "History", icon: FiClock },
@@ -474,7 +504,7 @@ export default function SuperAdminDashboard() {
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             {[
                                 { label: "Pending Citizen Requests", value: pendingCitizen, color: "text-red-600", bg: "bg-red-50", nav: "citizen" },
-                                { label: "Pending Field Reports", value: pendingReports, color: "text-orange-600", bg: "bg-orange-50", nav: "fieldreports" },
+                                { label: "New Contact Queries", value: pendingContacts, color: "text-orange-600", bg: "bg-orange-50", nav: "contacts" },
                                 { label: "Total Resources (All Orgs)", value: totalResources, color: "text-blue-600", bg: "bg-blue-50", nav: "resources" },
                                 { label: "Active Tasks", value: activeTasks, color: "text-indigo-600", bg: "bg-indigo-50", nav: "tasks" },
                             ].map(stat => (
@@ -773,7 +803,73 @@ export default function SuperAdminDashboard() {
                     </div>
                 )}
 
-                {/* OVERALL HISTORY */}
+                {/* --- CONTACT QUERIES --- */}
+                {activeNav === "contacts" && (
+                    <div className="space-y-4">
+                        {contacts.length === 0 ? (
+                            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+                                <HiChatBubbleLeftRight className="text-4xl text-slate-300 mx-auto mb-3" />
+                                <p className="text-slate-500">No contact queries yet.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4">
+                                {contacts.map(contact => (
+                                    <div key={contact._id} className="bg-white rounded-[2rem] border border-slate-100 p-8 hover:shadow-xl hover:shadow-blue-900/5 transition-all">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-xl font-bold">
+                                                    {contact.name.substring(0, 1).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-slate-900">{contact.name}</h3>
+                                                    <p className="text-xs text-slate-400 font-medium">{contact.email}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2">
+                                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-widest border ${contact.status === 'Pending' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                                    contact.status === 'Resolved' ? 'bg-green-50 text-green-600 border-green-100' :
+                                                        'bg-blue-50 text-blue-600 border-blue-100'
+                                                    }`}>
+                                                    {contact.status}
+                                                </span>
+                                                <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">
+                                                    {getTimeAgo(contact.createdAt)}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-slate-50 rounded-2xl p-6 mb-6">
+                                            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Subject: {contact.subject}</p>
+                                            <p className="text-sm text-slate-700 leading-relaxed font-medium capitalize">
+                                                "{contact.message}"
+                                            </p>
+                                        </div>
+
+                                        {contact.status !== 'Resolved' && (
+                                            <div className="flex gap-3">
+                                                <button
+                                                    onClick={() => handleUpdateContactStatus(contact._id, 'Resolved')}
+                                                    className="px-6 py-2.5 bg-green-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-100"
+                                                >
+                                                    Mark as Resolved
+                                                </button>
+                                                {contact.status === 'Pending' && (
+                                                    <button
+                                                        onClick={() => handleUpdateContactStatus(contact._id, 'Read')}
+                                                        className="px-6 py-2.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-700 transition-all shadow-lg shadow-slate-100"
+                                                    >
+                                                        Mark as Read
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+                {/* --- HISTORY --- */}
                 {activeNav === "history" && (
                     <div className="space-y-4">
                         <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm text-indigo-700">

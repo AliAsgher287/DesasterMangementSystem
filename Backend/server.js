@@ -38,6 +38,7 @@ app.use('/api/field-reports', require('./routes/fieldReportRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
 app.use('/api/disasters', require('./routes/disasterRoutes'));
 app.use('/api/super-admin', require('./routes/superAdminRoutes'));
+app.use('/api/contacts', require('./routes/contactRoutes'));
 
 const PORT = process.env.PORT || 5000;
 

@@ -229,6 +229,14 @@ export default function Page() {
                                             placeholder="••••••••"
                                             className={`w-full bg-slate-50 border ${submitted && !password ? 'border-red-500 ring-4 ring-red-500/5' : 'border-slate-100'} rounded-2xl px-6 py-4.5 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 focus:bg-white outline-none transition-all text-slate-900 placeholder:text-slate-300 font-semibold shadow-inner-sm`}
                                         />
+                                        <div className="flex justify-end px-1">
+                                            <Link
+                                                href="/authentication/forgot-password"
+                                                className="text-[10px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
+                                            >
+                                                Forgot Password?
+                                            </Link>
+                                        </div>
                                     </div>
                                 </div>
 
