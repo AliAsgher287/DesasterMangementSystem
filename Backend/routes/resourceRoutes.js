@@ -1,6 +1,7 @@
 const express = require('express');
 const {
     getResources,
+    getGlobalResources,
     addResource,
     updateResource,
     deleteResource
@@ -11,6 +12,7 @@ const router = express.Router();
 
 router.use(protect); // Protect all resource routes
 
+router.get('/global', getGlobalResources); // Must be before /:id
 router.get('/', getResources);
 router.post('/', addResource);
 router.put('/:id', updateResource);

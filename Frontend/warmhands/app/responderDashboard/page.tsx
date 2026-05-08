@@ -34,25 +34,48 @@ interface Task {
     createdAt: string;
 }
 
+interface FieldReport {
+    _id: string;
+    location: string;
+    priority: string;
+    description: string;
+    resourcesNeeded: string;
+    status: string;
+    createdAt: string;
+}
+
 export default function ResponderDashboard() {
     const [activeTab, setActiveTab] = useState("Active Tasks");
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [myAssessments, setMyAssessments] = useState<FieldReport[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [lastSynced, setLastSynced] = useState("Just now");
 
     const fetchTasks = async () => {
         try {
             const token = getAuthToken();
-            const response = await fetch("http://localhost:5000/api/tasks/my", {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-            const data = await response.json();
-            if (data.success) {
-                setTasks(data.data);
-                setLastSynced("Just now");
+            const [tasksResponse, assessmentsResponse] = await Promise.all([
+                fetch("http://localhost:5000/api/tasks/my", {
+                    headers: { "Authorization": `Bearer ${token}` }
+                }),
+                fetch("http://localhost:5000/api/field-reports/my", {
+                    headers: { "Authorization": `Bearer ${token}` }
+                })
+            ]);
+            
+            const tasksData = await tasksResponse.json();
+            const assessmentsData = await assessmentsResponse.json();
+            
+            if (tasksData.success) {
+                setTasks(tasksData.data);
             }
+            if (assessmentsData.success) {
+                setMyAssessments(assessmentsData.data);
+            }
+            
+            setLastSynced("Just now");
         } catch (err) {
-            console.error("Failed to fetch tasks");
+            console.error("Failed to fetch dashboard data");
         } finally {
             setIsLoading(false);
         }
@@ -121,7 +144,7 @@ export default function ResponderDashboard() {
                 </div>
 
                 <nav className="flex items-center gap-8">
-                    {["Active Tasks", "History", "Support"].map((item) => (
+                    {["Active Tasks", "My Assessments", "History", "Support"].map((item) => (
                         <button
                             key={item}
                             onClick={() => setActiveTab(item)}
@@ -166,7 +189,7 @@ export default function ResponderDashboard() {
                         </Link>
                         <div className="flex items-center gap-2 text-slate-500 text-sm bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
                             <FiClock />
-                            <span>Last synced 2 minutes ago</span>
+                            <span>Last synced {lastSynced}</span>
                         </div>
                     </div>
                 </div>
@@ -204,127 +227,178 @@ export default function ResponderDashboard() {
                     </div>
                 </div>
 
-                {/* Active Task List */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-10">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="font-bold text-lg">Active Task List</h3>
-                        <button className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
-                            <FiRefreshCw className="text-xs" />
-                            Filter Tasks
-                        </button>
-                    </div>
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-slate-50 border-b border-slate-100">
-                                <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Mission & Supplies</th>
-                                <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Operational Area</th>
-                                <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">H.Q.</th>
-                                <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Action Control</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {isLoading ? (
-                                <tr>
-                                    <td colSpan={4} className="py-20 text-center">
-                                        <FiLoader className="inline-block text-2xl text-blue-600 animate-spin mb-2" />
-                                        <p className="text-sm text-slate-500 font-medium">Loading your missions...</p>
-                                    </td>
-                                </tr>
-                            ) : tasks.length === 0 ? (
-                                <tr>
-                                    <td colSpan={4} className="py-20 text-center text-slate-400 italic">
-                                        No active tasks assigned to you.
-                                    </td>
-                                </tr>
-                            ) : tasks.map((task) => (
-                                <tr key={task._id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-8 py-6">
-                                        <div className="flex flex-col">
-                                            <p className="font-bold text-slate-900">{task.title}</p>
-                                            <p className="text-xs text-slate-400 mt-1 max-w-md italic">"{task.description}"</p>
+                {activeTab === "Active Tasks" && (
+                    <>
+                        {/* Active Task List */}
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                                <h3 className="font-bold text-lg">Active Task List</h3>
+                                <button className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+                                    <FiRefreshCw className="text-xs" />
+                                    Filter Tasks
+                                </button>
+                            </div>
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-100">
+                                        <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Mission & Supplies</th>
+                                        <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Operational Area</th>
+                                        <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">H.Q.</th>
+                                        <th className="px-8 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Action Control</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {isLoading ? (
+                                        <tr>
+                                            <td colSpan={4} className="py-20 text-center">
+                                                <FiLoader className="inline-block text-2xl text-blue-600 animate-spin mb-2" />
+                                                <p className="text-sm text-slate-500 font-medium">Loading your missions...</p>
+                                            </td>
+                                        </tr>
+                                    ) : tasks.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={4} className="py-20 text-center text-slate-400 italic">
+                                                No active tasks assigned to you.
+                                            </td>
+                                        </tr>
+                                    ) : tasks.map((task) => (
+                                        <tr key={task._id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-8 py-6">
+                                                <div className="flex flex-col">
+                                                    <p className="font-bold text-slate-900">{task.title}</p>
+                                                    <p className="text-xs text-slate-400 mt-1 max-w-md italic">"{task.description}"</p>
 
-                                            {task.assignedResources && task.assignedResources.length > 0 && (
-                                                <div className="mt-3 flex flex-wrap gap-2">
-                                                    {task.assignedResources.map((res, i) => (
-                                                        <div key={i} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-100 text-[10px] font-black uppercase tracking-tighter">
-                                                            <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded-sm">{res.quantity}</span>
-                                                            <span>{res.unit} {res.name}</span>
+                                                    {task.assignedResources && task.assignedResources.length > 0 && (
+                                                        <div className="mt-3 flex flex-wrap gap-2">
+                                                            {task.assignedResources.map((res, i) => (
+                                                                <div key={i} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-100 text-[10px] font-black uppercase tracking-tighter">
+                                                                    <span className="bg-blue-600 text-white px-1.5 py-0.5 rounded-sm">{res.quantity}</span>
+                                                                    <span>{res.unit} {res.name}</span>
+                                                                </div>
+                                                            ))}
                                                         </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex items-center gap-2 text-slate-700">
+                                                    <FiMapPin className="text-blue-500" />
+                                                    <span className="text-sm font-semibold">{task.location}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <p className="text-xs font-bold text-slate-900">{task.organization?.organizationName}</p>
+                                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">Coordinating Org</p>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <div className="inline-flex bg-slate-100 p-1 rounded-xl">
+                                                    {["Pending", "In Progress", "Completed"].map((status) => (
+                                                        <button
+                                                            key={status}
+                                                            onClick={() => handleStatusUpdate(task._id, status)}
+                                                            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${task.status === status
+                                                                ? status === "Pending"
+                                                                    ? "bg-white text-slate-500 shadow-sm"
+                                                                    : status === "In Progress"
+                                                                        ? "bg-white text-blue-600 shadow-sm"
+                                                                        : "bg-green-500 text-white shadow-md"
+                                                                : "text-slate-400 hover:text-slate-600"
+                                                                }`}
+                                                        >
+                                                            {status}
+                                                        </button>
                                                     ))}
                                                 </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <div className="flex items-center gap-2 text-slate-700">
-                                            <FiMapPin className="text-blue-500" />
-                                            <span className="text-sm font-semibold">{task.location}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <p className="text-xs font-bold text-slate-900">{task.organization?.organizationName}</p>
-                                        <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black">Coordinating Org</p>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <div className="inline-flex bg-slate-100 p-1 rounded-xl">
-                                            {["Pending", "In Progress", "Completed"].map((status) => (
-                                                <button
-                                                    key={status}
-                                                    onClick={() => handleStatusUpdate(task._id, status)}
-                                                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${task.status === status
-                                                        ? status === "Pending"
-                                                            ? "bg-white text-slate-500 shadow-sm"
-                                                            : status === "In Progress"
-                                                                ? "bg-white text-blue-600 shadow-sm"
-                                                                : "bg-green-500 text-white shadow-md"
-                                                        : "text-slate-400 hover:text-slate-600"
-                                                        }`}
-                                                >
-                                                    {status}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    <div className="px-8 py-4 bg-slate-50 flex items-center justify-between border-t border-slate-100">
-                        <p className="text-sm text-slate-400">Showing 4 of 12 active tasks</p>
-                        <div className="flex gap-2">
-                            <button className="px-4 py-2 text-sm font-medium text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">Previous</button>
-                            <button className="px-4 py-2 text-sm font-medium text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">Next</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="px-8 py-4 bg-slate-50 flex items-center justify-between border-t border-slate-100">
+                                <p className="text-sm text-slate-400">Showing {tasks.length} active tasks</p>
+                                <div className="flex gap-2">
+                                    <button className="px-4 py-2 text-sm font-medium text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">Previous</button>
+                                    <button className="px-4 py-2 text-sm font-medium text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">Next</button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                {/* Assigned Area Overview */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[400px]">
-                    <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <FiMapPin className="text-blue-600 text-xl" />
-                            <h3 className="font-bold text-lg">Assigned Area Overview</h3>
-                        </div>
-                        <button className="text-blue-600 text-sm font-bold hover:underline">Open Full Map</button>
-                    </div>
-                    <div className="p-10 flex flex-col items-center justify-center h-full min-h-[300px] relative">
-                        <div className="absolute inset-0 opacity-[0.03] pointer-events-none overflow-hidden">
-                            {/* Decorative dots grid */}
-                            <div className="grid grid-cols-[repeat(40,minmax(0,1fr))] gap-4 p-4 text-blue-600 text-xs">
-                                {Array.from({ length: 800 }).map((_, i) => (
-                                    <span key={i}>.</span>
-                                ))}
+                        {/* Assigned Area Overview */}
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden min-h-[400px]">
+                            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <FiMapPin className="text-blue-600 text-xl" />
+                                    <h3 className="font-bold text-lg">Assigned Area Overview</h3>
+                                </div>
+                                <button className="text-blue-600 text-sm font-bold hover:underline">Open Full Map</button>
+                            </div>
+                            <div className="p-10 flex flex-col items-center justify-center h-full min-h-[300px] relative">
+                                <div className="absolute inset-0 opacity-[0.03] pointer-events-none overflow-hidden">
+                                    {/* Decorative dots grid */}
+                                    <div className="grid grid-cols-[repeat(40,minmax(0,1fr))] gap-4 p-4 text-blue-600 text-xs">
+                                        {Array.from({ length: 800 }).map((_, i) => (
+                                            <span key={i}>.</span>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="relative z-10 flex flex-col items-center">
+                                    <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center shadow-lg shadow-blue-200 mb-4 transition-transform hover:scale-110 cursor-pointer">
+                                        <FiMapPin className="text-white text-2xl" />
+                                    </div>
+                                    <h4 className="font-bold text-slate-900">Zone 7: North Relief Sector</h4>
+                                    <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-bold">Current Headquarters</p>
+                                </div>
                             </div>
                         </div>
-                        <div className="relative z-10 flex flex-col items-center">
-                            <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center shadow-lg shadow-blue-200 mb-4 transition-transform hover:scale-110 cursor-pointer">
-                                <FiMapPin className="text-white text-2xl" />
-                            </div>
-                            <h4 className="font-bold text-slate-900">Zone 7: North Relief Sector</h4>
-                            <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest font-bold">Current Headquarters</p>
+                    </>
+                )}
+
+                {activeTab === "My Assessments" && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-10">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="font-bold text-lg">My Field Assessments</h3>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            {myAssessments.length === 0 ? (
+                                <div className="py-10 text-center text-slate-400 italic">
+                                    You have not submitted any field assessments yet.
+                                </div>
+                            ) : (
+                                myAssessments.map((assessment) => (
+                                    <div key={assessment._id} className="border border-slate-100 rounded-xl p-5 hover:shadow-md transition-shadow">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className={`text-xs px-2 py-1 rounded-full font-bold ${assessment.priority === 'Critical' || assessment.priority === 'High' ? 'bg-red-50 text-red-600' : assessment.priority === 'Medium' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>
+                                                        {assessment.priority}
+                                                    </span>
+                                                    <span className={`text-xs px-2 py-1 rounded-full font-bold ${assessment.status === 'Resolved' ? 'bg-green-500 text-white' : assessment.status === 'Actioned' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                        {assessment.status}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-slate-700 font-bold">
+                                                    <FiMapPin className="text-blue-500" />
+                                                    {assessment.location}
+                                                </div>
+                                            </div>
+                                            <span className="text-xs text-slate-400">
+                                                {new Date(assessment.createdAt).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div className="bg-slate-50 p-3 rounded-lg text-sm text-slate-600 mb-2">
+                                            <strong className="block text-slate-800 mb-1">Situation:</strong>
+                                            {assessment.description}
+                                        </div>
+                                        <div className="bg-slate-50 p-3 rounded-lg text-sm text-slate-600">
+                                            <strong className="block text-slate-800 mb-1">Resources Needed:</strong>
+                                            {assessment.resourcesNeeded}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
-                </div>
+                )}
             </main>
         </div>
     );

@@ -9,7 +9,7 @@ const CitizenHelpSchema = new mongoose.Schema({
     severity: {
         type: Number,
         min: 1,
-        max: 5
+        max: 10
     },
     helpTypes: {
         type: [String],
@@ -31,6 +31,16 @@ const CitizenHelpSchema = new mongoose.Schema({
     contactNumber: {
         type: String,
         required: [true, 'Please add a contact number']
+    },
+    location: {
+        type: String
+    },
+    aiScore: {
+        type: Number,
+        default: 0
+    },
+    aiReasoning: {
+        type: String
     },
     status: {
         type: String,

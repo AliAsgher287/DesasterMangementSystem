@@ -5,9 +5,9 @@ import { getAuthToken, getAuthItem, clearAuth } from "@/lib/auth";
 import Link from "next/link";
 import Image from "next/image";
 import {
-    FiGrid, FiPackage, FiInbox, FiUsers, FiRefreshCw,
+    FiGrid, FiPackage, FiUsers, FiRefreshCw,
     FiPlus, FiEdit2, FiCheck, FiX, FiLoader, FiLogOut,
-    FiAlertCircle, FiMapPin, FiClock
+    FiAlertCircle, FiMapPin, FiClock, FiMessageSquare
 } from "react-icons/fi";
 import { toast } from "react-hot-toast";
 
@@ -21,23 +21,6 @@ interface Resource {
     organizationName?: string; // Added to distinguish donor resources
 }
 
-interface IncomingRequest {
-    _id: string;
-    requester: { name: string; organizationName: string };
-    resource: { name: string } | null;
-    quantity: number;
-    status: string;
-    createdAt: string;
-}
-
-interface OutgoingRequest {
-    _id: string;
-    resource: { name: string } | null;
-    ownerOrganization: string;
-    quantity: number;
-    status: string;
-    createdAt: string;
-}
 
 interface Responder {
     _id: string;
@@ -56,19 +39,51 @@ interface Task {
     createdAt: string;
 }
 
+interface OrganizationRequest {
+    _id: string;
+    requestType: string;
+    message: string;
+    location: string;
+    priority: string;
+    status: string;
+    createdAt: string;
+    createdAt: string;
+    aiScore: number;
+}
+
+interface FieldReport {
+    _id: string;
+    responder: { name: string; organizationName: string } | null;
+    location: string;
+    priority: string;
+    description: string;
+    resourcesNeeded: string;
+    status: string;
+    createdAt: string;
+}
+
 const API = "http://localhost:5000/api";
 
 export default function OrganizationDashboard() {
     const [activeNav, setActiveNav] = useState("dashboard");
     const [requestTab, setRequestTab] = useState<"incoming" | "outgoing">("incoming");
     const [resources, setResources] = useState<Resource[]>([]);
-    const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([]);
-    const [myRequests, setMyRequests] = useState<OutgoingRequest[]>([]);
     const [responders, setResponders] = useState<Responder[]>([]);
     const [tasks, setTasks] = useState<Task[]>([]);
+    const [supportQueries, setSupportQueries] = useState<OrganizationRequest[]>([]);
+    const [fieldReports, setFieldReports] = useState<FieldReport[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
     const [user, setUser] = useState<{ name: string; organizationName: string; status: string } | null>(null);
+
+    const [supportForm, setSupportForm] = useState({
+        requestType: 'General inquiry',
+        message: '',
+        location: '',
+        affectedPeople: 0,
+        resourceNeeded: ''
+    });
+    const [isSubmittingQuery, setIsSubmittingQuery] = useState(false);
 
     // Add / Edit Resource modals
     const [showAddModal, setShowAddModal] = useState(false);
@@ -97,23 +112,31 @@ export default function OrganizationDashboard() {
             const token = getAuthToken();
             const h = { "Authorization": `Bearer ${token}` };
 
-            const [resRes, inReqRes, myReqRes, respRes, taskRes] = await Promise.all([
-                fetch(`${API}/resources`, { headers: h }),
-                fetch(`${API}/requests/incoming`, { headers: h }),
-                fetch(`${API}/requests/my`, { headers: h }),
-                fetch(`${API}/tasks/responders`, { headers: h }),
-                fetch(`${API}/tasks`, { headers: h })
-            ]);
+            const safeFetch = async (url: string) => {
+                try {
+                    const res = await fetch(url, { headers: h });
+                    const json = await res.json();
+                    if (!json.success) console.warn(`[fetchData] ${url} returned success:false`, json.error || '');
+                    return json;
+                } catch (err) {
+                    console.error(`[fetchData] Failed to fetch ${url}:`, err);
+                    return { success: false };
+                }
+            };
 
-            const [resData, inReqData, myReqData, respData, taskData] = await Promise.all([
-                resRes.json(), inReqRes.json(), myReqRes.json(), respRes.json(), taskRes.json()
+            const [resData, respData, taskData, supportData, fieldRepData] = await Promise.all([
+                safeFetch(`${API}/resources`),
+                safeFetch(`${API}/tasks/responders`),
+                safeFetch(`${API}/tasks`),
+                safeFetch(`${API}/organization-requests`),
+                safeFetch(`${API}/field-reports`),
             ]);
 
             if (resData.success) setResources(resData.data);
-            if (inReqData.success) setIncomingRequests(inReqData.data);
-            if (myReqData.success) setMyRequests(myReqData.data);
             if (respData.success) setResponders(respData.data);
             if (taskData.success) setTasks(taskData.data);
+            if (supportData?.success) setSupportQueries(supportData.data);
+            if (fieldRepData?.success) setFieldReports(fieldRepData.data);
         } catch {
             setError("Failed to load data. Please ensure the backend is running.");
         } finally {
@@ -121,19 +144,6 @@ export default function OrganizationDashboard() {
         }
     }, []);
 
-    const handleRequestAction = async (id: string, status: "Approved" | "Rejected") => {
-        const token = getAuthToken();
-        const res = await fetch(`${API}/requests/${id}/status`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-            body: JSON.stringify({ status })
-        });
-        const data = await res.json();
-        if (data.success) {
-            fetchData();
-            toast.success(`Request ${status}`);
-        } else toast.error(data.error);
-    };
 
     const handleAddResource = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -208,6 +218,49 @@ export default function OrganizationDashboard() {
         }
     };
 
+    const handleSupportSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmittingQuery(true);
+        try {
+            const token = getAuthToken();
+            const res = await fetch(`${API}/ai/prioritize-organization`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify(supportForm)
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Support query submitted & prioritized successfully!");
+                setSupportForm({ requestType: 'General inquiry', message: '', location: '', affectedPeople: 0, resourceNeeded: '' });
+                fetchData();
+            } else {
+                toast.error(data.error || "Submission failed");
+            }
+        } catch (err) {
+            toast.error("Failed to submit support query");
+        } finally {
+            setIsSubmittingQuery(false);
+        }
+    };
+
+    const handleAssessmentStatus = async (id: string, status: string) => {
+        try {
+            const token = getAuthToken();
+            const res = await fetch(`${API}/field-reports/${id}/status`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ status })
+            });
+            const data = await res.json();
+            if (data.success) {
+                fetchData();
+                toast.success(`Assessment marked as ${status}`);
+            } else toast.error(data.error);
+        } catch (err) {
+            toast.error("Failed to update assessment status");
+        }
+    };
+
     const getTimeAgo = (d: string) => {
         const diff = Math.floor((Date.now() - new Date(d).getTime()) / 60000);
         if (diff < 1) return "Just now";
@@ -223,19 +276,20 @@ export default function OrganizationDashboard() {
     const myResources = resources.filter(r => r.organizationName === user?.organizationName);
     const donorResources = resources.filter(r => r.organizationName === "Individual Donor");
 
-    const pendingIn = incomingRequests.filter(r => r.status === "Pending").length;
     const activeTasks = tasks.filter(t => t.status !== "Completed").length;
 
     const navItems = [
         { id: "dashboard", label: "Overview", icon: FiGrid },
         { id: "resources", label: "Resources", icon: FiPackage },
-        { id: "requests", label: "Requests", icon: FiInbox, badge: pendingIn },
+        { id: "support", label: "Support Queries", icon: FiMessageSquare },
         { id: "responders", label: "Responders", icon: FiUsers },
         { id: "tasks", label: "My Tasks", icon: FiCheck, badge: activeTasks },
+        { id: "assessments", label: "Assessments", icon: FiAlertCircle, badge: fieldReports.filter(r => r.status === 'Pending').length },
         { id: "history", label: "History", icon: FiClock },
     ];
 
     const CATEGORIES = ["Food", "Water", "Medical", "Shelter", "Tools", "SOPs", "Other"];
+    const REQUEST_TYPES = ['Resource shortage', 'Need ambulance', 'Need rescue team', 'Need medical staff', 'Need food/water supplies', 'Shelter full / need shelter support', 'Need urgent approval', 'Technical issue', 'Staff shortage', 'Vehicle breakdown', 'General inquiry', 'Other'];
 
     return (
         <div className="flex min-h-screen bg-slate-50">
@@ -337,6 +391,7 @@ export default function OrganizationDashboard() {
                 </div>
             )}
 
+
             {/* Sidebar */}
             <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed h-full z-20">
                 <div className="p-6 border-b border-slate-200">
@@ -380,9 +435,10 @@ export default function OrganizationDashboard() {
                         <h1 className="text-2xl font-bold text-slate-900">
                             {activeNav === "dashboard" && "Dashboard Overview"}
                             {activeNav === "resources" && "Resource Inventory"}
-                            {activeNav === "requests" && "Resource Requests"}
+                            {activeNav === "support" && "Super Admin Support"}
                             {activeNav === "responders" && "My Responders"}
                             {activeNav === "tasks" && "Active Tasks"}
+                            {activeNav === "assessments" && "Field Assessments"}
                             {activeNav === "history" && "Task History"}
                         </h1>
                         <p className="text-sm text-slate-500 mt-1">{user?.organizationName} — Organization Admin</p>
@@ -417,11 +473,11 @@ export default function OrganizationDashboard() {
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                             {[
                                 { label: "My Resources", value: myResources.length, color: "text-blue-600", bg: "bg-blue-50", nav: "resources" },
-                                { label: "Pending Requests", value: pendingIn, color: "text-orange-600", bg: "bg-orange-50", nav: "requests" },
                                 { label: "Active Tasks", value: activeTasks, color: "text-green-600", bg: "bg-green-50", nav: "tasks" },
+                                { label: "Pending Assessments", value: fieldReports.filter(r => r.status === 'Pending').length, color: "text-red-600", bg: "bg-red-50", nav: "assessments" },
                             ].map(stat => (
                                 <button key={stat.label} onClick={() => setActiveNav(stat.nav)}
                                     className={`${stat.bg} rounded-2xl p-6 text-left border border-white hover:shadow-md transition-all`}>
@@ -450,26 +506,6 @@ export default function OrganizationDashboard() {
                                 ))}
                         </div>
 
-                        {/* Pending Incoming Requests */}
-                        <div className="bg-white rounded-2xl border border-slate-100 p-6">
-                            <h2 className="text-lg font-bold text-slate-900 mb-4">Pending Incoming Requests</h2>
-                            {incomingRequests.filter(r => r.status === "Pending").length === 0
-                                ? <p className="text-sm text-slate-400 italic">No pending requests.</p>
-                                : incomingRequests.filter(r => r.status === "Pending").slice(0, 5).map(req => (
-                                    <div key={req._id} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0">
-                                        <div>
-                                            <p className="text-sm font-bold text-slate-900">{req.requester?.organizationName} requested {req.quantity}x {req.resource?.name || "resource"}</p>
-                                            <p className="text-xs text-slate-400">By {req.requester?.name} · {getTimeAgo(req.createdAt)}</p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleRequestAction(req._id, "Approved")}
-                                                className="text-xs bg-green-50 text-green-700 px-3 py-1.5 rounded-lg font-bold hover:bg-green-100"><FiCheck /></button>
-                                            <button onClick={() => handleRequestAction(req._id, "Rejected")}
-                                                className="text-xs bg-red-50 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-100"><FiX /></button>
-                                        </div>
-                                    </div>
-                                ))}
-                        </div>
                     </>
                 )}
 
@@ -580,67 +616,6 @@ export default function OrganizationDashboard() {
                     </div>
                 )}
 
-                {/* REQUESTS */}
-                {activeNav === "requests" && (
-                    <div className="space-y-4">
-                        <div className="flex gap-2 bg-white rounded-xl border border-slate-100 p-1 w-fit">
-                            <button onClick={() => setRequestTab("incoming")}
-                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${requestTab === "incoming" ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-700"}`}>
-                                Incoming {pendingIn > 0 && <span className="ml-1 bg-white text-blue-600 text-xs px-1.5 rounded-full">{pendingIn}</span>}
-                            </button>
-                            <button onClick={() => setRequestTab("outgoing")}
-                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${requestTab === "outgoing" ? "bg-blue-600 text-white shadow" : "text-slate-500 hover:text-slate-700"}`}>
-                                Outgoing
-                            </button>
-                        </div>
-
-                        {requestTab === "incoming" && (
-                            <div className="space-y-3">
-                                {incomingRequests.length === 0
-                                    ? <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center"><p className="text-slate-400">No incoming requests.</p></div>
-                                    : incomingRequests.map(req => (
-                                        <div key={req._id} className="bg-white rounded-2xl border border-slate-100 p-5 flex items-center justify-between gap-4">
-                                            <div>
-                                                <p className="text-sm font-bold text-slate-900">{req.quantity}x {req.resource?.name || "resource"} requested by {req.requester?.organizationName}</p>
-                                                <p className="text-xs text-slate-400 mt-1">By {req.requester?.name} · {getTimeAgo(req.createdAt)}</p>
-                                            </div>
-                                            <div className="flex items-center gap-3 flex-shrink-0">
-                                                <span className={`text-xs px-2 py-1 rounded-full font-bold ${getStatusColor(req.status)}`}>{req.status}</span>
-                                                {req.status === "Pending" && (
-                                                    <>
-                                                        <button onClick={() => handleRequestAction(req._id, "Approved")}
-                                                            className="px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 flex items-center gap-1">
-                                                            <FiCheck /> Approve
-                                                        </button>
-                                                        <button onClick={() => handleRequestAction(req._id, "Rejected")}
-                                                            className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 flex items-center gap-1">
-                                                            <FiX /> Reject
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-
-                        {requestTab === "outgoing" && (
-                            <div className="space-y-3">
-                                {myRequests.length === 0
-                                    ? <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center"><p className="text-slate-400">No outgoing requests.</p></div>
-                                    : myRequests.map(req => (
-                                        <div key={req._id} className="bg-white rounded-2xl border border-slate-100 p-5 flex items-center justify-between gap-4">
-                                            <div>
-                                                <p className="text-sm font-bold text-slate-900">{req.quantity}x {req.resource?.name || "resource"} from {req.ownerOrganization}</p>
-                                                <p className="text-xs text-slate-400 mt-1">{getTimeAgo(req.createdAt)}</p>
-                                            </div>
-                                            <span className={`text-xs px-2 py-1 rounded-full font-bold ${getStatusColor(req.status)}`}>{req.status}</span>
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 {/* RESPONDERS */}
                 {activeNav === "responders" && (
@@ -731,6 +706,74 @@ export default function OrganizationDashboard() {
                     </div>
                 )}
 
+                {/* ASSESSMENTS */}
+                {activeNav === "assessments" && (
+                    <div className="space-y-4">
+                        <div className="bg-white rounded-2xl border border-slate-100 p-6">
+                            <p className="text-sm text-slate-500 mb-4">
+                                These are field assessments broadcasted by responders under <strong>{user?.organizationName}</strong>.
+                            </p>
+                            {fieldReports.length === 0
+                                ? (
+                                    <div className="py-8 text-center">
+                                        <FiAlertCircle className="text-4xl text-slate-300 mx-auto mb-3" />
+                                        <p className="text-slate-400">No field assessments submitted yet.</p>
+                                    </div>
+                                )
+                                : (
+                                    <div className="space-y-3">
+                                        {fieldReports.map(report => (
+                                            <div key={report._id} className="bg-slate-50 rounded-xl border border-slate-100 p-5">
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <span className={`text-xs px-2 py-1 rounded-full font-bold ${getPriorityColor(report.priority)}`}>{report.priority}</span>
+                                                            <span className={`text-xs px-2 py-1 rounded-full font-bold ${getStatusColor(report.status)}`}>{report.status}</span>
+                                                        </div>
+                                                        <p className="font-bold text-slate-900 text-sm">Report by {report.responder?.name || 'Unknown'}</p>
+                                                        <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><FiMapPin className="text-[10px]" />{report.location}</p>
+                                                        
+                                                        <div className="mt-3 bg-white p-3 rounded-lg border border-slate-100 text-xs text-slate-600">
+                                                            <strong className="block mb-1 text-slate-800">Situation:</strong>
+                                                            {report.description}
+                                                        </div>
+                                                        
+                                                        <div className="mt-2 bg-white p-3 rounded-lg border border-slate-100 text-xs text-slate-600">
+                                                            <strong className="block mb-1 text-slate-800">Resources Needed:</strong>
+                                                            {report.resourcesNeeded}
+                                                        </div>
+
+                                                        {report.status !== "Resolved" && (
+                                                            <div className="mt-3 flex gap-2">
+                                                                {report.status === "Pending" && (
+                                                                    <button
+                                                                        onClick={() => handleAssessmentStatus(report._id, "Actioned")}
+                                                                        className="px-3 py-1.5 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-100 flex items-center gap-1 transition-colors"
+                                                                    >
+                                                                        Mark as Actioned
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => handleAssessmentStatus(report._id, "Resolved")}
+                                                                    className="px-3 py-1.5 bg-green-50 text-green-700 text-xs font-bold rounded-lg hover:bg-green-100 flex items-center gap-1 transition-colors"
+                                                                >
+                                                                    <FiCheck /> Mark as Resolved
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-slate-400 flex-shrink-0 flex items-center gap-1">
+                                                        <FiClock className="text-[10px]" />{getTimeAgo(report.createdAt)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                        </div>
+                    </div>
+                )}
+
                 {/* HISTORY */}
                 {activeNav === "history" && (
                     <div className="space-y-4">
@@ -770,6 +813,74 @@ export default function OrganizationDashboard() {
                                     )}
                                 </div>
                             ))}
+                    </div>
+                )}
+
+                {/* SUPPORT QUERIES */}
+                {activeNav === "support" && (
+                    <div className="space-y-8">
+                        <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+                            <h2 className="text-lg font-bold text-slate-900 mb-2">Submit Support Query</h2>
+                            <p className="text-sm text-slate-500 mb-6">Your request will be analyzed by our AI to automatically determine its priority and alert the Super Admin accordingly.</p>
+                            
+                            <form onSubmit={handleSupportSubmit} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Request Type</label>
+                                        <select value={supportForm.requestType} onChange={e => setSupportForm({...supportForm, requestType: e.target.value})} className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50">
+                                            {REQUEST_TYPES.map(rt => <option key={rt} value={rt}>{rt}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Location</label>
+                                        <input type="text" required value={supportForm.location} onChange={e => setSupportForm({...supportForm, location: e.target.value})} placeholder="Current location or affected area" className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Estimated People Affected</label>
+                                        <input type="number" value={supportForm.affectedPeople} onChange={e => setSupportForm({...supportForm, affectedPeople: parseInt(e.target.value) || 0})} className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-slate-700 mb-1">Specific Resource Needed (Optional)</label>
+                                        <input type="text" value={supportForm.resourceNeeded} onChange={e => setSupportForm({...supportForm, resourceNeeded: e.target.value})} placeholder="E.g., 50x blankets" className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Detailed Message</label>
+                                    <textarea required rows={4} value={supportForm.message} onChange={e => setSupportForm({...supportForm, message: e.target.value})} placeholder="Describe the situation in detail..." className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+                                </div>
+                                <button type="submit" disabled={isSubmittingQuery} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+                                    {isSubmittingQuery ? <FiLoader className="animate-spin" /> : <FiMessageSquare />} Submit to AI Triage
+                                </button>
+                            </form>
+                        </div>
+
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900 mb-4">Your Past Queries</h2>
+                            {supportQueries.length === 0 ? (
+                                <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+                                    <FiMessageSquare className="text-4xl text-slate-300 mx-auto mb-3" />
+                                    <p className="text-slate-400">No support queries submitted yet.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {supportQueries.map(q => (
+                                        <div key={q._id} className="bg-white rounded-2xl border border-slate-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${getPriorityColor(q.priority)}`}>AI Priority: {q.priority}</span>
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${getStatusColor(q.status)}`}>{q.status}</span>
+                                                </div>
+                                                <p className="font-bold text-slate-900 text-sm">{q.requestType}</p>
+                                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{q.message}</p>
+                                                <p className="text-xs text-slate-400 mt-1 flex items-center gap-1"><FiMapPin className="text-[10px]" />{q.location} · {getTimeAgo(q.createdAt)}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </main>

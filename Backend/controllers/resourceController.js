@@ -135,3 +135,34 @@ exports.deleteResource = async (req, res, next) => {
         });
     }
 };
+
+// @desc    Get all resources from OTHER organizations (for requesting)
+// @route   GET /api/resources/global
+// @access  Private (admin)
+exports.getGlobalResources = async (req, res, next) => {
+    try {
+        const myOrgName = req.user?.organizationName || '';
+        console.log('[Global Resources] Fetching for org:', myOrgName);
+
+        // Build query — if myOrgName is empty, return all Available resources
+        const query = { status: 'Available' };
+        if (myOrgName) {
+            query.organizationName = { $ne: myOrgName };
+        }
+
+        const resources = await Resource.find(query).sort('organizationName');
+        console.log('[Global Resources] Found:', resources.length, 'resources');
+
+        res.status(200).json({
+            success: true,
+            count: resources.length,
+            data: resources
+        });
+    } catch (err) {
+        console.error('[Global Resources] Error:', err.message);
+        res.status(400).json({
+            success: false,
+            error: err.message
+        });
+    }
+};

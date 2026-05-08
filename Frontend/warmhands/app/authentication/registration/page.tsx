@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { FiShield, FiStar, FiArrowRight, FiLock, FiAlertCircle, FiLoader, FiUsers, FiPackage } from "react-icons/fi";
+import { useState, useEffect } from "react";
+import { FiShield, FiStar, FiArrowRight, FiLock, FiAlertCircle, FiLoader, FiUsers, FiPackage, FiChevronDown } from "react-icons/fi";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -21,6 +21,30 @@ export default function Page() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [stats, setStats] = useState<{ organizationsCount?: number } | null>(null);
+  const [organizations, setOrganizations] = useState<{ _id: string, organizationName: string }[]>([]);
+  const [isOrgLoading, setIsOrgLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("http://localhost:5000/api/public/stats")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setStats(data.data);
+        }
+      })
+      .catch(err => console.error("Failed to fetch stats", err));
+
+    fetch("http://localhost:5000/api/public/organizations")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setOrganizations(data.data);
+        }
+      })
+      .catch(err => console.error("Failed to fetch organizations", err))
+      .finally(() => setIsOrgLoading(false));
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -205,23 +229,89 @@ export default function Page() {
                   </div>
                 )}
 
+                {/* Role Designation - Moved to Top for better UX */}
+                <div className="pb-8 border-b border-slate-100 mb-8">
+                  <p className="text-sm font-bold text-slate-800 mb-4 text-center">
+                    Designated Functional Assignment
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[
+                      { id: 'admin', label: 'Command Admin', desc: 'Strategy & teams.', icon: FiShield },
+                      { id: 'responder', label: 'Field Responder', desc: 'Direct operations.', icon: FiStar },
+                      { id: 'donor', label: 'Signal Donor', desc: 'Supply resources.', icon: FiPackage }
+                    ].map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          setRole(r.id as any);
+                          // Reset org name if switching to responder to force selection
+                          if (r.id === 'responder') setFormData(prev => ({ ...prev, organizationName: "" }));
+                        }}
+                        className={`group relative rounded-2xl p-4 border-2 transition-all text-left flex flex-col items-center text-center ${role === r.id
+                          ? "border-blue-600 bg-blue-50/50 shadow-sm ring-4 ring-blue-500/5"
+                          : "border-slate-100 bg-white hover:border-blue-200"
+                          }`}
+                      >
+                        <r.icon className={`text-2xl mb-2 transition-colors ${role === r.id ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
+                        <p className={`font-bold text-[10px] uppercase tracking-tighter ${role === r.id ? 'text-slate-900' : 'text-slate-500'}`}>
+                          {r.label}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-semibold italic leading-tight">{r.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {role === 'responder' && stats?.organizationsCount !== undefined && (
+                    <div className="mt-4 text-center text-[11px] font-bold text-blue-700 bg-blue-50/50 py-3 rounded-xl border border-blue-100/50 flex items-center justify-center gap-2">
+                      <FiUsers className="text-lg opacity-80" />
+                      <span>Join {stats.organizationsCount} active organizations in the network!</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                   {/* Organization Name */}
                   {role !== 'donor' && (
                     <div className="group space-y-1">
                       <label className="block text-sm font-bold text-slate-800 ml-1 transition-colors group-focus-within:text-blue-600">
-                        Organization Name
+                        {role === 'responder' ? 'Select Organization' : 'Organization Name'}
                       </label>
-                      <input
-                        type="text"
-                        name="organizationName"
-                        value={formData.organizationName}
-                        onChange={handleChange}
-                        required
-                        autoComplete="off"
-                        placeholder="e.g. Red Cross"
-                        className={`w-full bg-slate-50 border ${submitted && !formData.organizationName ? 'border-red-500 ring-4 ring-red-500/5' : 'border-slate-100'} rounded-2xl px-5 py-3.5 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 focus:bg-white outline-none transition-all text-slate-900 placeholder:text-slate-300 font-semibold shadow-inner-sm text-[15px]`}
-                      />
+                      <div className="relative group/select">
+                        {role === 'responder' ? (
+                          <>
+                            <select
+                              name="organizationName"
+                              value={formData.organizationName}
+                              onChange={(e) => setFormData({ ...formData, organizationName: e.target.value })}
+                              required
+                              disabled={isOrgLoading}
+                              className={`w-full bg-slate-50 border ${submitted && !formData.organizationName ? 'border-red-500 ring-4 ring-red-500/5' : 'border-slate-100'} rounded-2xl px-5 py-3.5 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 focus:bg-white outline-none transition-all text-slate-900 font-semibold shadow-inner-sm text-[15px] appearance-none disabled:opacity-50`}
+                            >
+                              <option value="" disabled>{isOrgLoading ? "Loading organizations..." : "Select an organization"}</option>
+                              {organizations.map(org => (
+                                <option key={org._id} value={org.organizationName}>
+                                  {org.organizationName}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within/select:text-blue-600 transition-colors">
+                              {isOrgLoading ? <FiLoader className="animate-spin" /> : <FiChevronDown className="text-lg" />}
+                            </div>
+                          </>
+                        ) : (
+                          <input
+                            type="text"
+                            name="organizationName"
+                            value={formData.organizationName}
+                            onChange={handleChange}
+                            required
+                            autoComplete="off"
+                            placeholder="e.g. Red Cross"
+                            className={`w-full bg-slate-50 border ${submitted && !formData.organizationName ? 'border-red-500 ring-4 ring-red-500/5' : 'border-slate-100'} rounded-2xl px-5 py-3.5 focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 focus:bg-white outline-none transition-all text-slate-900 placeholder:text-slate-300 font-semibold shadow-inner-sm text-[15px]`}
+                          />
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -310,35 +400,6 @@ export default function Page() {
                   </div>
                 </div>
 
-                {/* Role Designation */}
-                <div className="pt-4 border-t border-slate-100">
-                  <p className="text-sm font-bold text-slate-800 mb-4 text-center">
-                    Designated Functional Assignment
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    {[
-                      { id: 'admin', label: 'Command Admin', desc: 'Strategy & teams.', icon: FiShield },
-                      { id: 'responder', label: 'Field Responder', desc: 'Direct operations.', icon: FiStar },
-                      { id: 'donor', label: 'Signal Donor', desc: 'Supply resources.', icon: FiPackage }
-                    ].map((r) => (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => setRole(r.id as any)}
-                        className={`group relative rounded-xl p-4 border-2 transition-all text-left ${role === r.id
-                          ? "border-blue-600 bg-blue-50/50 shadow-sm"
-                          : "border-slate-100 bg-white hover:border-blue-200"
-                          }`}
-                      >
-                        <r.icon className={`text-xl mb-1 transition-colors ${role === r.id ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`} />
-                        <p className={`font-bold text-[11px] uppercase tracking-tighter ${role === r.id ? 'text-slate-900' : 'text-slate-500'}`}>
-                          {r.label}
-                        </p>
-                        <p className="text-[10px] text-slate-400 mt-0.5 font-semibold italic">{r.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
 
                 {/* Submit Action */}
                 <div className="flex justify-center pt-6">

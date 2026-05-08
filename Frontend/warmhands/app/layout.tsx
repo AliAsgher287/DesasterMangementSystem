@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import ToastProvider from "@/components/ToastProvider";
+import NavigationGuard from "@/components/NavigationGuard";
 
 const interSize = Inter({
   variable: "--font-inter",
@@ -28,6 +29,7 @@ export default function RootLayout({
       <body
         className={`${interSize.variable} ${outfitSize.variable} font-sans antialiased`}
       >
+        <NavigationGuard />
         <ToastProvider />
         {children}
       </body>

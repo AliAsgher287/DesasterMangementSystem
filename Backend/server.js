@@ -4,7 +4,7 @@ const cors = require('cors');
 const connectDB = require('./config/db');
 
 // Load env vars
-dotenv.config();
+dotenv.config({ override: true });
 
 // Connect to database
 connectDB();
@@ -39,8 +39,11 @@ app.use('/api/tasks', require('./routes/taskRoutes'));
 app.use('/api/disasters', require('./routes/disasterRoutes'));
 app.use('/api/super-admin', require('./routes/superAdminRoutes'));
 app.use('/api/contacts', require('./routes/contactRoutes'));
+app.use('/api/organization-requests', require('./routes/organizationRequestRoutes'));
+app.use('/api/ai/prioritize-organization', require('./routes/organizationRequestRoutes')); // Alias to match user requested API
+app.use('/api/public', require('./routes/publicRoutes'));
 
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT, 10) || 5000;
 
 app.listen(PORT, () => {
     console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);

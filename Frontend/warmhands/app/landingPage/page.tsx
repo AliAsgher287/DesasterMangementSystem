@@ -1,10 +1,23 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { HiShieldCheck, HiRectangleStack, HiUserGroup } from "react-icons/hi2";
 
 export default function HomePage() {
+  const [stats, setStats] = useState({ partners: 0, resources: 0 });
+
+  useEffect(() => {
+    fetch("http://localhost:5000/api/public/stats")
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setStats(data.data);
+        }
+      })
+      .catch(err => console.error("Failed to fetch live stats:", err));
+  }, []);
   return (
     <main className="w-full bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 selection:text-blue-900">
       {/* ================= NAVBAR ================= */}
@@ -122,11 +135,11 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-6">
           <div className="flex flex-wrap justify-center gap-12 md:gap-24 text-center">
             <div>
-              <p className="text-4xl font-black text-blue-600 mb-1">500+</p>
+              <p className="text-4xl font-black text-blue-600 mb-1">{stats.partners}+</p>
               <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Global Partners</p>
             </div>
             <div>
-              <p className="text-4xl font-black text-blue-600 mb-1">10M+</p>
+              <p className="text-4xl font-black text-blue-600 mb-1">{stats.resources.toLocaleString()}+</p>
               <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Resources Tracked</p>
             </div>
             <div>

@@ -94,7 +94,7 @@ exports.updateRequestStatus = async (req, res, next) => {
         }
 
         // Check if user belongs to the organization that owns the resource
-        if (request.ownerOrganization !== req.user.organizationName) {
+        if (request.ownerOrganization !== req.user.organizationName && req.user.role !== 'superadmin') {
             return res.status(401).json({ success: false, error: 'Not authorized to update this status' });
         }
 
@@ -102,7 +102,7 @@ exports.updateRequestStatus = async (req, res, next) => {
         await request.save();
 
         // If approved, decrement resource quantity (optional, but good for real systems)
-        if (status === 'Approved') {
+        if (status === 'Approved' && request.resource) {
             const resource = await Resource.findById(request.resource._id);
             if (resource) {
                 resource.quantity -= request.quantity;

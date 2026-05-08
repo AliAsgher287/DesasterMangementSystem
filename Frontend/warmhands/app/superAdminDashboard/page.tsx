@@ -7,7 +7,7 @@ import Image from "next/image";
 import {
     FiGrid, FiUsers, FiFileText, FiPackage, FiAlertCircle,
     FiRefreshCw, FiPlus, FiCheck, FiX, FiLoader, FiLogOut,
-    FiShield, FiMapPin, FiClock, FiChevronDown
+    FiShield, FiMapPin, FiClock, FiChevronDown, FiMessageSquare
 } from "react-icons/fi";
 import { HiChatBubbleLeftRight } from "react-icons/hi2";
 import { toast } from "react-hot-toast";
@@ -24,6 +24,8 @@ interface CitizenHelpRequest {
     isInjured: boolean;
     isImmediateDanger: boolean;
     peopleAffected: number;
+    aiScore?: number;
+    aiReasoning?: string;
 }
 
 interface FieldReport {
@@ -85,6 +87,21 @@ interface Task {
     createdAt: string;
 }
 
+interface OrganizationRequest {
+    _id: string;
+    organizationName: string;
+    requestType: string;
+    message: string;
+    location: string;
+    affectedPeople: number;
+    resourceNeeded: string;
+    priority: string;
+    status: string;
+    createdAt: string;
+    aiScore: number;
+    aiReasoning: string;
+}
+
 const API = "http://localhost:5000/api";
 
 export default function SuperAdminDashboard() {
@@ -96,6 +113,7 @@ export default function SuperAdminDashboard() {
     const [tasks, setTasks] = useState<Task[]>([]);
     const [responders, setResponders] = useState<Responder[]>([]);
     const [contacts, setContacts] = useState<ContactQuery[]>([]);
+    const [orgRequests, setOrgRequests] = useState<OrganizationRequest[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
 
@@ -134,17 +152,18 @@ export default function SuperAdminDashboard() {
         setIsLoading(true);
         setError("");
         try {
-            const [citizenRes, fieldRes, resourceRes, orgsRes, tasksRes, contactsRes] = await Promise.all([
+            const [citizenRes, fieldRes, resourceRes, orgsRes, tasksRes, contactsRes, orgReqRes] = await Promise.all([
                 fetch(`${API}/citizen-help`, { headers }),
                 fetch(`${API}/field-reports`, { headers }),
                 fetch(`${API}/resources`, { headers }),
                 fetch(`${API}/super-admin/organizations`, { headers }),
                 fetch(`${API}/tasks`, { headers }),
-                fetch(`${API}/contacts`, { headers })
+                fetch(`${API}/contacts`, { headers }),
+                fetch(`${API}/organization-requests`, { headers })
             ]);
 
-            const [citizenData, fieldData, resourceData, orgsData, tasksData, contactsData] = await Promise.all([
-                citizenRes.json(), fieldRes.json(), resourceRes.json(), orgsRes.json(), tasksRes.json(), contactsRes.json()
+            const [citizenData, fieldData, resourceData, orgsData, tasksData, contactsData, orgReqData] = await Promise.all([
+                citizenRes.json(), fieldRes.json(), resourceRes.json(), orgsRes.json(), tasksRes.json(), contactsRes.json(), orgReqRes.json()
             ]);
 
             if (citizenData.success) setCitizenRequests(citizenData.data);
@@ -153,6 +172,7 @@ export default function SuperAdminDashboard() {
             if (orgsData.success) setOrganizations(orgsData.data);
             if (tasksData.success) setTasks(tasksData.data);
             if (contactsData.success) setContacts(contactsData.data);
+            if (orgReqData?.success) setOrgRequests(orgReqData.data);
         } catch {
             setError("Failed to load data. Check backend connection.");
         } finally {
@@ -196,6 +216,22 @@ export default function SuperAdminDashboard() {
             if (data.success) {
                 fetchData();
                 toast.success(`Query marked as ${status}`);
+            } else {
+                toast.error(data.error || "Failed to update status");
+            }
+        } catch { toast.error("Connection error"); }
+    };
+
+    const handleUpdateOrgRequestStatus = async (id: string, status: string) => {
+        try {
+            const res = await fetch(`${API}/organization-requests/${id}/status`, {
+                method: "PATCH", headers,
+                body: JSON.stringify({ status })
+            });
+            const data = await res.json();
+            if (data.success) {
+                fetchData();
+                toast.success(`Organization request marked as ${status}`);
             } else {
                 toast.error(data.error || "Failed to update status");
             }
@@ -302,12 +338,14 @@ export default function SuperAdminDashboard() {
 
     const pendingCitizen = citizenRequests.filter(r => r.status === "Pending").length;
     const pendingContacts = contacts.filter(c => c.status === "Pending").length;
+    const pendingOrgRequests = orgRequests.filter(c => c.status === "Pending").length;
     const totalResources = resources.length;
     const activeTasks = tasks.filter(t => t.status !== "Completed").length;
 
     const navItems = [
         { id: "dashboard", label: "Overview", icon: FiGrid },
         { id: "citizen", label: "Citizen Help", icon: FiAlertCircle, badge: pendingCitizen },
+        { id: "org-requests", label: "Support Queries", icon: FiMessageSquare, badge: pendingOrgRequests },
         { id: "contacts", label: "Contact Queries", icon: HiChatBubbleLeftRight, badge: pendingContacts },
         { id: "resources", label: "All Resources", icon: FiPackage },
         { id: "tasks", label: "Task Management", icon: FiUsers },
@@ -476,6 +514,7 @@ export default function SuperAdminDashboard() {
                         <h1 className="text-3xl font-black text-slate-900 font-heading tracking-tighter">
                             {activeNav === "dashboard" && "Platform Overview"}
                             {activeNav === "citizen" && <><span className="text-gradient">Citizen</span> Help Requests</>}
+                            {activeNav === "org-requests" && "Organization Support Queries"}
                             {activeNav === "fieldreports" && "Field Reports"}
                             {activeNav === "resources" && "Organization Resources"}
                             {activeNav === "tasks" && "Active Task Management"}
@@ -504,8 +543,8 @@ export default function SuperAdminDashboard() {
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                             {[
                                 { label: "Pending Citizen Requests", value: pendingCitizen, color: "text-red-600", bg: "bg-red-50", nav: "citizen" },
+                                { label: "Org Support Queries", value: pendingOrgRequests, color: "text-purple-600", bg: "bg-purple-50", nav: "org-requests" },
                                 { label: "New Contact Queries", value: pendingContacts, color: "text-orange-600", bg: "bg-orange-50", nav: "contacts" },
-                                { label: "Total Resources (All Orgs)", value: totalResources, color: "text-blue-600", bg: "bg-blue-50", nav: "resources" },
                                 { label: "Active Tasks", value: activeTasks, color: "text-indigo-600", bg: "bg-indigo-50", nav: "tasks" },
                             ].map(stat => (
                                 <button key={stat.label} onClick={() => setActiveNav(stat.nav)}
@@ -590,10 +629,15 @@ export default function SuperAdminDashboard() {
                             <div key={req._id} className="bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-sm transition-all">
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
+                                        <div className="flex items-center gap-3 mb-2 flex-wrap">
                                             <span className={`text-xs px-2 py-1 rounded-full border font-bold ${getSeverityColor(req.severity)}`}>
                                                 Severity {req.severity}/10
                                             </span>
+                                            {req.aiScore !== undefined && (
+                                                <span className="text-[10px] px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-black uppercase tracking-widest border border-purple-200">
+                                                    AI Score: {req.aiScore}
+                                                </span>
+                                            )}
                                             <span className={`text-xs px-2 py-1 rounded-full font-bold ${getStatusColor(req.status)}`}>
                                                 {req.status}
                                             </span>
@@ -628,6 +672,11 @@ export default function SuperAdminDashboard() {
                                                 <FiMapPin className="text-[10px]" />{req.location}
                                             </p>
                                         )}
+                                        {req.aiReasoning && (
+                                            <div className="mt-3 text-[11px] bg-purple-50 text-purple-800 p-2.5 rounded-lg border border-purple-100">
+                                                <strong>AI Reasoning:</strong> {req.aiReasoning}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex flex-col gap-2 flex-shrink-0">
                                         {req.status === "Pending" && (
@@ -643,6 +692,65 @@ export default function SuperAdminDashboard() {
                                             </>
                                         )}
                                     </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* --- ORG REQUESTS --- */}
+                {activeNav === "org-requests" && (
+                    <div className="space-y-4">
+                        {orgRequests.length === 0 ? (
+                            <div className="bg-white rounded-2xl border border-slate-100 p-12 text-center">
+                                <FiMessageSquare className="text-4xl text-slate-300 mx-auto mb-3" />
+                                <p className="text-slate-500">No support queries from organizations.</p>
+                            </div>
+                        ) : orgRequests.map(req => (
+                            <div key={req._id} className="bg-white rounded-2xl border border-slate-100 p-6 hover:shadow-sm transition-all flex flex-col md:flex-row gap-6">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-widest ${getPriorityColor(req.priority)}`}>
+                                            AI Priority: {req.priority} ({req.aiScore})
+                                        </span>
+                                        <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-widest ${getStatusColor(req.status)}`}>
+                                            {req.status}
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                            {getTimeAgo(req.createdAt)}
+                                        </span>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-1">{req.organizationName} - {req.requestType}</h3>
+                                    <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-xl mb-3 border border-slate-100">"{req.message}"</p>
+                                    
+                                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-500">
+                                        <p className="flex items-center gap-1"><FiMapPin className="text-[10px]" /> Location: <span className="font-bold text-slate-700">{req.location}</span></p>
+                                        <p>People Affected: <span className="font-bold text-slate-700">{req.affectedPeople || 'Unknown'}</span></p>
+                                        {req.resourceNeeded && <p>Needed Resource: <span className="font-bold text-slate-700">{req.resourceNeeded}</span></p>}
+                                    </div>
+                                    <div className="mt-3 text-xs bg-indigo-50 text-indigo-700 p-3 rounded-xl border border-indigo-100">
+                                        <strong>AI Triage Reasoning:</strong> {req.aiReasoning}
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-2 flex-shrink-0 md:w-48">
+                                    {req.status === "Pending" && (
+                                        <>
+                                            <button onClick={() => handleUpdateOrgRequestStatus(req._id, "In Progress")}
+                                                className="w-full py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl hover:bg-blue-100 transition-colors flex items-center justify-center gap-1">
+                                                <FiLoader /> Mark In Progress
+                                            </button>
+                                            <button onClick={() => handleUpdateOrgRequestStatus(req._id, "Resolved")}
+                                                className="w-full py-2 bg-green-50 text-green-700 text-xs font-bold rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-1">
+                                                <FiCheck /> Resolve
+                                            </button>
+                                        </>
+                                    )}
+                                    {req.status === "In Progress" && (
+                                        <button onClick={() => handleUpdateOrgRequestStatus(req._id, "Resolved")}
+                                            className="w-full py-2 bg-green-50 text-green-700 text-xs font-bold rounded-xl hover:bg-green-100 transition-colors flex items-center justify-center gap-1">
+                                            <FiCheck /> Resolve
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}
